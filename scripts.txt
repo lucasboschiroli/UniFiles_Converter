@@ -1,0 +1,9 @@
+Convert a single audio:  python converter.py song.wav mp3
+Convert a single file:   python converter.py document.docx pdf
+Convert a single image:  python converter.py photo.png jpg
+Convert a single video:  python converter.py video.mp4 webm
+Convert a spreadsheet:   python converter.py data.xlsx csv
+
+Batch convert all files in a folder:  python converter.py --batch ./my_images png
+
+Desktop app:  npm install, then npm start  (or download the installer from GitHub Releases)

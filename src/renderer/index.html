@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- The renderer never touches the network or disk itself (all work happens
+         in main), so only local files, thumbnails (data:) and Google Fonts. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>UniFiles Converter</title>
+    <link rel="stylesheet" href="styles/app.css">
+</head>
+<body>
+    <div class="titlebar">
+        <div class="win-controls">
+            <button id="winMinimize" class="win-btn" title="Minimize">&#8211;</button>
+            <button id="winMaximize" class="win-btn" title="Maximize">&#9633;</button>
+            <button id="winClose" class="win-btn win-close" title="Close">&#10005;</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="logo">UniFiles <span>Converter</span></div>
+        <div class="add-box">
+            <svg class="add-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M12 11v6M9 14h6"/></svg>
+            <span class="add-hint">Drop files anywhere, or</span>
+            <button id="addFolderBtn" class="ghost-btn">Add folder</button>
+            <button id="addFilesBtn" class="accent-btn">Add files</button>
+        </div>
+        <div class="header-right">
+            <span id="toolBadge" class="tool-badge"></span>
+        </div>
+    </header>
+
+    <main>
+        <section id="emptyState" class="dropzone">
+            <div class="empty-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 16a4 4 0 0 1-.88-7.9A5 5 0 0 1 15.9 6h.1a5 5 0 0 1 1 9.9M12 12v9m0-9-3 3m3-3 3 3"/></svg>
+            </div>
+            <h2>Drop files here to convert them</h2>
+            <p>Mix anything: each file gets its own format, and you can change them all at once.</p>
+            <div class="format-groups">
+                <div><b>Images</b>JPG · PNG · WebP · AVIF · GIF · TIFF · BMP · ICO · SVG · PDF</div>
+                <div><b>Video</b>MP4 · WebM · MKV · MOV · AVI · GIF · to MP3</div>
+                <div><b>Audio</b>MP3 · WAV · FLAC · OGG · M4A · AAC · Opus</div>
+                <div><b>Documents</b>PDF · Word · TXT · Markdown · HTML · PDF to images</div>
+                <div><b>Spreadsheets</b>XLSX · XLS · ODS · CSV · to PDF</div>
+            </div>
+        </section>
+
+        <section id="workspace" class="hidden">
+            <div class="card bulk">
+                <div class="bulk-title">Convert all</div>
+                <div id="bulkRows" class="bulk-rows"></div>
+            </div>
+
+            <details id="optionsCard" class="card options">
+                <summary>
+                    <span>Options</span>
+                    <span id="optionsSummary" class="options-summary"></span>
+                </summary>
+                <div class="options-grid">
+                    <div class="opt" data-cat="image">
+                        <span class="opt-label">Image quality <em id="qualityValue" class="opt-hint"></em></span>
+                        <input id="qualityRange" type="range" min="40" max="100" step="5">
+                    </div>
+                    <div class="opt" data-cat="image">
+                        <span class="opt-label">Image size</span>
+                        <div class="seg" id="maxSizeSeg">
+                            <button data-value="0">Original</button>
+                            <button data-value="3840">4K</button>
+                            <button data-value="1920">1920 px</button>
+                            <button data-value="1280">1280 px</button>
+                            <button data-value="800">800 px</button>
+                        </div>
+                    </div>
+                    <div class="opt" data-cat="video">
+                        <span class="opt-label">Video quality</span>
+                        <div class="seg" id="videoQualitySeg">
+                            <button data-value="high">High</button>
+                            <button data-value="balanced">Balanced</button>
+                            <button data-value="small">Smaller file</button>
+                        </div>
+                    </div>
+                    <div class="opt" data-cat="video">
+                        <span class="opt-label">Video resolution</span>
+                        <div class="seg" id="resolutionSeg">
+                            <button data-value="0">Original</button>
+                            <button data-value="1080">1080p</button>
+                            <button data-value="720">720p</button>
+                            <button data-value="480">480p</button>
+                        </div>
+                    </div>
+                    <div class="opt" data-cat="audio">
+                        <span class="opt-label">Audio quality</span>
+                        <div class="seg" id="audioBitrateSeg">
+                            <button data-value="320">320 kbps</button>
+                            <button data-value="256">256</button>
+                            <button data-value="192">192</button>
+                            <button data-value="128">128</button>
+                        </div>
+                    </div>
+                    <div class="opt" data-cat="image">
+                        <span class="opt-label">Images to PDF</span>
+                        <label class="toggle"><input type="checkbox" id="mergePdfChk"><span></span>Combine into one PDF</label>
+                    </div>
+                </div>
+            </details>
+
+            <div class="card save-row">
+                <span class="opt-label">Save to</span>
+                <div class="seg" id="outModeSeg">
+                    <button data-value="same">Next to the original</button>
+                    <button data-value="folder">A folder</button>
+                </div>
+                <button id="folderBtn" class="folder-path" title="Choose folder"></button>
+            </div>
+
+            <div class="list-head">
+                <div>
+                    <h1 id="listTitle" class="section-title"></h1>
+                    <p id="listMeta" class="meta"></p>
+                </div>
+                <div class="list-actions">
+                    <button id="clearBtn" class="ghost-btn">Clear list</button>
+                    <button id="cancelBtn" class="outline-btn hidden">Cancel</button>
+                    <button id="convertBtn" class="accent-btn">Convert</button>
+                </div>
+            </div>
+
+            <div id="overall" class="overall card hidden">
+                <div class="overall-top">
+                    <span id="overallText"></span>
+                    <button id="overallShow" class="ghost-btn small hidden">Show in folder</button>
+                </div>
+                <div class="bar"><div id="overallFill" class="bar-fill"></div></div>
+            </div>
+
+            <ol id="items" class="items"></ol>
+        </section>
+    </main>
+
+    <div id="dropOverlay" class="drop-overlay hidden"><div>Drop to add files</div></div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

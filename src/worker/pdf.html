@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>pdf worker</title>
+</head>
+<body>
+<script type="module">
+    import * as pdfjs from '../../node_modules/pdfjs-dist/build/pdf.mjs';
+
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL('../../node_modules/pdfjs-dist/build/pdf.worker.mjs', import.meta.url).href;
+
+    function readBytes(url) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', url);
+            xhr.responseType = 'arraybuffer';
+            xhr.onload = () => resolve(new Uint8Array(xhr.response));
+            xhr.onerror = () => reject(new Error('Could not read the PDF file'));
+            xhr.send();
+        });
+    }
+
+    async function load(url) {
+        return pdfjs.getDocument({ data: await readBytes(url), isEvalSupported: false }).promise;
+    }
+
+    // Turns positioned text pieces into lines, then paragraphs, keeping
+    // larger text (headings) apart so it can be styled.
+    function toParagraphs(items) {
+        const pieces = items
+            .filter((it) => it.str !== undefined)
+            .map((it) => ({ text: it.str, x: it.transform[4], y: it.transform[5], size: Math.abs(it.transform[3]) || it.height, w: it.width, eol: it.hasEOL, bold: /bold|black|heavy/i.test(it.fontName || '') }));
+        const lines = [];
+        for (const p of pieces) {
+            if (!p.text.trim() && !p.eol) continue;
+            const line = lines.find((l) => Math.abs(l.y - p.y) < Math.max(2, p.size * 0.4));
+            if (line) line.pieces.push(p);
+            else lines.push({ y: p.y, pieces: [p] });
+        }
+        lines.sort((a, b) => b.y - a.y);
+        for (const l of lines) l.end = Math.max(...l.pieces.map((p) => p.x + p.w));
+        const right = Math.max(...lines.map((l) => l.end));
+        const left = Math.min(...lines.map((l) => Math.min(...l.pieces.map((p) => p.x))));
+        const out = [];
+        let para = null, prev = null;
+        for (const l of lines) {
+            l.pieces.sort((a, b) => a.x - b.x);
+            let text = '', lastEnd = null;
+            for (const p of l.pieces) {
+                if (lastEnd !== null && p.x - lastEnd > p.size * 0.2 && !text.endsWith(' ') && !p.text.startsWith(' ')) text += ' ';
+                text += p.text;
+                lastEnd = p.x + p.w;
+            }
+            text = text.replace(/\s+/g, ' ').trim();
+            if (!text) continue;
+            const size = Math.max(...l.pieces.map((p) => p.size));
+            const bold = l.pieces.every((p) => p.bold || !p.text.trim());
+            const gap = prev ? prev.y - l.y : 0;
+            // A line that stopped well short of the right edge ended its paragraph
+            // (or list item); a bullet or number starts a new one.
+            const prevShort = prev && prev.end < left + (right - left) * 0.75;
+            const newPara = !para || prevShort || Math.abs(size - para.size) > 1.5 || gap > size * 1.8 || /^([•●▪◦\-–*]|\d+[.)])\s?/.test(text);
+            if (newPara) {
+                para = { text, size, bold };
+                out.push(para);
+            } else {
+                para.text = para.text.endsWith('-') ? para.text.slice(0, -1) + text : `${para.text} ${text}`;
+                para.bold = para.bold && bold;
+            }
+            prev = l;
+        }
+        return out;
+    }
+
+    window.pdfText = async (url) => {
+        const doc = await load(url);
+        const pages = [];
+        for (let i = 1; i <= doc.numPages; i++) {
+            const page = await doc.getPage(i);
+            const content = await page.getTextContent();
+            pages.push({ paragraphs: toParagraphs(content.items) });
+            page.cleanup();
+        }
+        await doc.destroy();
+        return { pages };
+    };
+
+    let current = null;
+    window.pdfOpen = async (url) => {
+        if (current) await current.destroy();
+        current = await load(url);
+        return current.numPages;
+    };
+    window.pdfRender = async (n, scale, mime) => {
+        const page = await current.getPage(n);
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        page.cleanup();
+        return canvas.toDataURL(mime, 0.92);
+    };
+    window.pdfClose = async () => {
+        if (current) await current.destroy();
+        current = null;
+    };
+
+    window.pdfReady = Promise.resolve(true);
+</script>
+</body>
+</html>

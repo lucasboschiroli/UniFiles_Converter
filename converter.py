@@ -6,24 +6,46 @@ import subprocess
 
 try:
     from docx import Document
-    from docx2pdf import convert as docx_to_pdf_convert
     DOCX_AVAILABLE = True
 except ImportError:
     DOCX_AVAILABLE = False
 
 try:
-    from PyPDF2 import PdfReader, PdfWriter
-    from pdf2docx import Converter as PDFConverter
+    # Only needed for DOCX -> PDF (it drives Microsoft Word)
+    from docx2pdf import convert as docx_to_pdf_convert
+    DOCX2PDF_AVAILABLE = True
+except ImportError:
+    DOCX2PDF_AVAILABLE = False
+
+try:
+    from PyPDF2 import PdfReader
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
 
 try:
     import openpyxl
-    import xlrd
     EXCEL_AVAILABLE = True
 except ImportError:
     EXCEL_AVAILABLE = False
+
+try:
+    import xlrd  # only needed to read old .xls files
+    XLS_AVAILABLE = True
+except ImportError:
+    XLS_AVAILABLE = False
+
+
+def output_path(input_file, ext):
+    """Save next to the original file and never overwrite an existing one:
+    photo.png -> photo.jpg, or photo (1).jpg if that already exists."""
+    src = Path(input_file)
+    candidate = src.with_name(f'{src.stem}.{ext.lower()}')
+    n = 1
+    while candidate.exists():
+        candidate = src.with_name(f'{src.stem} ({n}).{ext.lower()}')
+        n += 1
+    return str(candidate)
 
 def convert_image(input_file, output_format):
     try:
@@ -36,7 +58,7 @@ def convert_image(input_file, output_format):
             background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
             img = background
         
-        output_file = Path(input_file).stem + f'.{output_format.lower()}'
+        output_file = output_path(input_file, output_format)
         img.save(output_file, quality=95)
         print(f"✓ Converted: {output_file}")
         return True
@@ -46,7 +68,7 @@ def convert_image(input_file, output_format):
 
 def convert_video(input_file, output_format):
     try:
-        output_file = Path(input_file).stem + f'.{output_format.lower()}'
+        output_file = output_path(input_file, output_format)
         
         presets = {
             'mp4': ['-c:v', 'libx264', '-c:a', 'aac', '-strict', 'experimental'],
@@ -78,7 +100,7 @@ def convert_video(input_file, output_format):
 
 def convert_audio(input_file, output_format):
     try:
-        output_file = Path(input_file).stem + f'.{output_format.lower()}'
+        output_file = output_path(input_file, output_format)
         
         codecs = {
             'mp3': ['-c:a', 'libmp3lame', '-b:a', '192k'],
@@ -132,11 +154,11 @@ def convert_document(input_file, output_format):
     return False
 
 def docx_to_pdf(input_file):
-    if not DOCX_AVAILABLE:
-        print("✗ Error: Install with: pip install python-docx docx2pdf")
+    if not DOCX2PDF_AVAILABLE:
+        print("✗ Error: Install with: pip install docx2pdf (it also needs Microsoft Word)")
         return False
     try:
-        output_file = Path(input_file).stem + '.pdf'
+        output_file = output_path(input_file, 'pdf')
         docx_to_pdf_convert(input_file, output_file)
         print(f"✓ Converted: {output_file}")
         return True
@@ -145,16 +167,105 @@ def docx_to_pdf(input_file):
         return False
 
 def pdf_to_docx(input_file):
-    if not PDF_AVAILABLE:
-        print("✗ Error: Install with: pip install PyPDF2 pdf2docx")
-        return False
+    """
+    Convert PDF to DOCX using PyMuPDF to extract text
+    and python-docx to create the Word document.
+    This avoids the pdf2docx compatibility issue.
+    """
     try:
-        output_file = Path(input_file).stem + '.docx'
-        cv = PDFConverter(input_file)
-        cv.convert(output_file)
-        cv.close()
+        import fitz  # PyMuPDF
+        from docx import Document
+        from docx.shared import Pt, RGBColor
+        
+        output_file = output_path(input_file, 'docx')
+        
+        print("[INFO] [1/4] Opening document...")
+        pdf_document = fitz.open(input_file)
+        
+        print("[INFO] [2/4] Analyzing document...")
+        doc = Document()
+        
+        print("[INFO] [3/4] Converting content...")
+        for page_num in range(len(pdf_document)):
+            page = pdf_document[page_num]
+            text = page.get_text()
+            
+            # Add page content
+            if text.strip():
+                doc.add_paragraph(text)
+            
+            # Add page break except for last page
+            if page_num < len(pdf_document) - 1:
+                doc.add_page_break()
+        
+        print("[INFO] [4/4] Finalizing...")
+        pdf_document.close()
+        doc.save(output_file)
+        
         print(f"✓ Converted: {output_file}")
         return True
+        
+    except ImportError:
+        print("✗ Error: Install with: pip install PyMuPDF python-docx")
+        return False
+    except Exception as e:
+        print(f"✗ Error: {e}")
+        return False
+
+
+def pdf_to_docx_advanced(input_file):
+    """
+    Advanced PDF to DOCX conversion that preserves more formatting.
+    Uses PyMuPDF to extract text blocks with positioning.
+    """
+    try:
+        import fitz  # PyMuPDF
+        from docx import Document
+        from docx.shared import Pt
+        
+        output_file = output_path(input_file, 'docx')
+        
+        print("[INFO] [1/4] Opening document...")
+        pdf_document = fitz.open(input_file)
+        
+        print("[INFO] [2/4] Analyzing document...")
+        doc = Document()
+        
+        print("[INFO] [3/4] Converting content...")
+        for page_num in range(len(pdf_document)):
+            page = pdf_document[page_num]
+            
+            # Extract text blocks with better formatting preservation
+            blocks = page.get_text("blocks")
+            
+            for block in blocks:
+                # block format: (x0, y0, x1, y1, "text", block_no, block_type)
+                if len(block) >= 5:
+                    text = block[4].strip()
+                    if text:
+                        paragraph = doc.add_paragraph(text)
+                        
+                        # Try to detect headings by font size (simple heuristic)
+                        block_height = block[3] - block[1]
+                        if block_height > 20:  # Larger text might be heading
+                            for run in paragraph.runs:
+                                run.font.size = Pt(14)
+                                run.bold = True
+            
+            # Add page break except for last page
+            if page_num < len(pdf_document) - 1:
+                doc.add_page_break()
+        
+        print("[INFO] [4/4] Finalizing...")
+        pdf_document.close()
+        doc.save(output_file)
+        
+        print(f"✓ Converted: {output_file}")
+        return True
+        
+    except ImportError:
+        print("✗ Error: Install with: pip install PyMuPDF python-docx")
+        return False
     except Exception as e:
         print(f"✗ Error: {e}")
         return False
@@ -164,19 +275,25 @@ def txt_to_pdf(input_file):
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import letter
         
-        output_file = Path(input_file).stem + '.pdf'
+        output_file = output_path(input_file, 'pdf')
         c = canvas.Canvas(output_file, pagesize=letter)
         
         with open(input_file, 'r', encoding='utf-8') as f:
             text = f.read()
         
+        # Wrap long lines to the page width instead of cutting them at 80 characters.
+        from reportlab.lib.utils import simpleSplit
+        font, size = 'Helvetica', 11
+        c.setFont(font, size)
         y = 750
-        for line in text.split('\n'):
-            if y < 50:
-                c.showPage()
-                y = 750
-            c.drawString(50, y, line[:80])
-            y -= 15
+        for paragraph in text.split('\n'):
+            for line in simpleSplit(paragraph, font, size, letter[0] - 100) or ['']:
+                if y < 50:
+                    c.showPage()
+                    c.setFont(font, size)
+                    y = 750
+                c.drawString(50, y, line)
+                y -= 15
         
         c.save()
         print(f"✓ Converted: {output_file}")
@@ -193,7 +310,7 @@ def txt_to_docx(input_file):
         print("✗ Error: Install with: pip install python-docx")
         return False
     try:
-        output_file = Path(input_file).stem + '.docx'
+        output_file = output_path(input_file, 'docx')
         doc = Document()
         
         with open(input_file, 'r', encoding='utf-8') as f:
@@ -212,7 +329,7 @@ def pdf_to_txt(input_file):
         print("✗ Error: Install with: pip install PyPDF2")
         return False
     try:
-        output_file = Path(input_file).stem + '.txt'
+        output_file = output_path(input_file, 'txt')
         reader = PdfReader(input_file)
         
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -230,7 +347,7 @@ def docx_to_txt(input_file):
         print("✗ Error: Install with: pip install python-docx")
         return False
     try:
-        output_file = Path(input_file).stem + '.txt'
+        output_file = output_path(input_file, 'txt')
         doc = Document(input_file)
         
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -249,9 +366,29 @@ def convert_excel(input_file, output_format):
         return False
     
     input_ext = Path(input_file).suffix.lower()
-    output_file = Path(input_file).stem + f'.{output_format.lower()}'
-    
+    output_format = output_format.lower()
+    output_file = output_path(input_file, output_format)
+
     try:
+        if output_format == 'csv' and input_ext == '.xlsx':
+            import csv
+            sheet = openpyxl.load_workbook(input_file, data_only=True).active
+            with open(output_file, 'w', newline='', encoding='utf-8-sig') as f:
+                csv.writer(f).writerows(sheet.iter_rows(values_only=True))
+            print(f"✓ Converted: {output_file}")
+            return True
+        if output_format == 'xlsx' and input_ext == '.csv':
+            import csv
+            wb = openpyxl.Workbook()
+            with open(input_file, newline='', encoding='utf-8-sig') as f:
+                for row in csv.reader(f):
+                    wb.active.append(row)
+            wb.save(output_file)
+            print(f"✓ Converted: {output_file}")
+            return True
+        if input_ext == '.xls' and not XLS_AVAILABLE:
+            print("✗ Error: Install with: pip install xlrd")
+            return False
         if input_ext == '.xls' and output_format == 'xlsx':
             workbook = xlrd.open_workbook(input_file)
             new_wb = openpyxl.Workbook()
@@ -282,7 +419,7 @@ def detect_file_type(filename):
     video_formats = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v'}
     audio_formats = {'.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.wma'}
     document_formats = {'.pdf', '.docx', '.doc', '.txt'}
-    excel_formats = {'.xls', '.xlsx'}
+    excel_formats = {'.xls', '.xlsx', '.csv'}
     
     if ext in image_formats:
         return 'image'
@@ -298,20 +435,35 @@ def detect_file_type(filename):
         return None
 
 def batch_convert(input_dir, output_format):
-    files = list(Path(input_dir).glob('*'))
+    output_format = output_format.lower().lstrip('.')
+    if not Path(input_dir).is_dir():
+        print(f"✗ Error: Folder '{input_dir}' not found")
+        return
+    # Only files that can become this format, and not ones already in it.
+    targets = {
+        'image': {'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'ico'},
+        'video': {'mp4', 'webm', 'avi', 'mkv', 'mov', 'gif'},
+        'audio': {'mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'},
+        'document': {'pdf', 'docx', 'txt'},
+        'excel': {'xlsx', 'csv'},
+    }
+    files = [f for f in sorted(Path(input_dir).iterdir())
+             if f.is_file() and output_format in targets.get(detect_file_type(str(f)), set())
+             and f.suffix.lower().lstrip('.') != output_format]
+    if not files:
+        print(f"Nothing in '{input_dir}' can be converted to {output_format.upper()}")
+        return
     converted = 0
-    
+
     for file in files:
-        if file.is_file():
-            file_type = detect_file_type(str(file))
-            if file_type:
-                print(f"\nConverting: {file.name}")
-                if convert_file(str(file), output_format):
-                    converted += 1
-    
+        print(f"\nConverting: {file.name}")
+        if convert_file(str(file), output_format):
+            converted += 1
+
     print(f"\n✓ Converted {converted}/{len(files)} files")
 
 def convert_file(input_file, output_format):
+    output_format = output_format.lower().lstrip('.')
     if not os.path.exists(input_file):
         print(f"✗ Error: File '{input_file}' not found")
         return False

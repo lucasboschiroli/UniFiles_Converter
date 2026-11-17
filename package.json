@@ -1,0 +1,73 @@
+{
+  "name": "unifiles-converter",
+  "version": "1.0.0",
+  "description": "UniFiles Converter - convert images, video, audio, documents and spreadsheets",
+  "author": "Lucas Salomão Boschiroli",
+  "license": "MIT",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
+  },
+  "build": {
+    "appId": "com.unifilesconverter.app",
+    "productName": "UniFiles Converter",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/sharp/**/*",
+      "node_modules/@img/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "UniFiles-Converter-Setup-${version}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "lucasboschiroli",
+      "repo": "Images_Converter",
+      "releaseType": "draft"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.11.3",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "docx": "^9.15.4",
+    "electron-updater": "^6.8.11",
+    "mammoth": "^1.13.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38",
+    "sharp": "^0.34.5",
+    "xlsx": "^0.18.5"
+  },
+  "allowScripts": {
+    "electron@44.11.3": true,
+    "sharp@0.34.5": true
+  }
+}
