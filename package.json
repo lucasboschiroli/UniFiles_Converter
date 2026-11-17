@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "UniFiles Converter - convert images, video, audio, documents and spreadsheets",
   "author": "Lucas Salomão Boschiroli",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
@@ -44,7 +44,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "UniFiles-Converter-Setup-${version}.${ext}"
+      "artifactName": "UniFiles-Converter-Setup-${version}.${ext}",
+      "license": "LICENSE"
     },
     "publish": {
       "provider": "github",

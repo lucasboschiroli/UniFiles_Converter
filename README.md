@@ -212,7 +212,7 @@ This tool is for personal use. Please respect copyright laws and only convert fi
 
 ## License
 
-This project is open source and available under the MIT License.
+© 2025 Lucas Salomão Boschiroli. All rights reserved. Free to use for personal, non-commercial purposes; the code may not be copied, modified, redistributed or sold without permission. See [LICENSE](LICENSE).
 
 ## Credits
 
