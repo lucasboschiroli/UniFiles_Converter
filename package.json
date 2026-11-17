@@ -49,7 +49,7 @@
     "publish": {
       "provider": "github",
       "owner": "lucasboschiroli",
-      "repo": "Images_Converter",
+      "repo": "UniFiles_Converter",
       "releaseType": "draft"
     }
   },
