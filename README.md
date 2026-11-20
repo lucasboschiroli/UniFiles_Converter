@@ -4,7 +4,7 @@ A desktop app (and command-line tool) to convert images, videos, audio files, do
 
 ## Desktop App
 
-**Install it:** download `UniFiles-Setup-x.x.x.exe` from the [latest release](https://github.com/lucasboschiroli/UniFiles_Converter/releases/latest) and run it. Everything it needs (including ffmpeg) is built in, so Python isn't needed, and the app updates itself when a new version is released.
+**Install it:** download `UniFiles-Setup-x.x.x.exe` from the [latest release](https://github.com/lucasboschiroli/UniFiles/releases/latest) and run it. Everything it needs (including ffmpeg) is built in, so Python isn't needed, and the app updates itself when a new version is released.
 
 **Use it:**
 1. Drop files (or a whole folder) anywhere on the window, or press **Add files** / **Add folder**. You can mix images, videos, audio, documents and spreadsheets.
