@@ -14,7 +14,7 @@ function init(getWindow) {
             buttons: ['Restart now', 'Later'],
             defaultId: 0,
             title: 'Update ready',
-            message: `UniFiles Converter ${info.version} has been downloaded.`,
+            message: `UniFiles ${info.version} has been downloaded.`,
             detail: 'Restart to finish updating. It will also install the next time you close the app.',
         });
         if (response === 0) autoUpdater.quitAndInstall();

@@ -1,4 +1,4 @@
-Download **UniFiles-Converter-Setup-x.x.x.exe** from the Assets below and run it.
+Download **UniFiles-Setup-x.x.x.exe** from the Assets below and run it.
 
 - Drop in images, videos, audio, documents and spreadsheets (or a whole folder) and convert them all at once
 - Pick a format per file, or set every image / video / etc. in one click

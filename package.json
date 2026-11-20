@@ -1,7 +1,7 @@
 {
   "name": "unifiles-converter",
-  "version": "1.2.0",
-  "description": "UniFiles Converter - convert images, video, audio, documents and spreadsheets",
+  "version": "1.3.0",
+  "description": "UniFiles - convert and edit images, video, audio, documents, ebooks, comics and spreadsheets",
   "author": "Lucas Salomão Boschiroli",
   "license": "UNLICENSED",
   "main": "src/main/main.js",
@@ -12,7 +12,7 @@
   },
   "build": {
     "appId": "com.unifilesconverter.app",
-    "productName": "UniFiles Converter",
+    "productName": "UniFiles",
     "directories": {
       "buildResources": "build",
       "output": "dist"
@@ -44,7 +44,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "UniFiles-Converter-Setup-${version}.${ext}",
+      "artifactName": "UniFiles-Setup-${version}.${ext}",
       "license": "LICENSE"
     },
     "publish": {

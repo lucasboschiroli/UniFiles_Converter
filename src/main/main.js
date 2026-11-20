@@ -14,11 +14,16 @@ const { ebookThumb } = require('./convert/ebooks');
 
 let mainWindow = null;
 
+// The app was renamed from "UniFiles Converter" to "UniFiles". Keep using the
+// original data folder, so everyone's settings survive the rename (and any
+// future one).
+app.setPath('userData', path.join(app.getPath('appData'), 'unifiles-converter'));
+
 // ---------------------------------------------------------------- settings
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const defaultSettings = () => ({
     outMode: 'same',                // 'same' = next to the original, 'folder' = outDir
-    outDir: path.join(app.getPath('documents'), 'UniFiles Converter'),
+    outDir: path.join(app.getPath('documents'), 'UniFiles'),
     quality: 90,                    // JPG / WebP / AVIF
     maxSize: 0,                     // longest side in px, 0 = keep
     videoQuality: 'balanced',
@@ -28,11 +33,13 @@ const defaultSettings = () => ({
 });
 
 function loadSettings() {
-    try {
-        return { ...defaultSettings(), ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) };
-    } catch {
-        return defaultSettings();
-    }
+    let saved = {};
+    try { saved = JSON.parse(fs.readFileSync(settingsFile(), 'utf8')); } catch { /* first run */ }
+    // The old default folder was named after the old app name; if it was never
+    // used (doesn't exist), follow the new default instead.
+    const oldDefault = path.join(app.getPath('documents'), 'UniFiles Converter');
+    if (saved.outDir === oldDefault && !fs.existsSync(oldDefault)) delete saved.outDir;
+    return { ...defaultSettings(), ...saved };
 }
 
 // Write to a temp file and rename, so a read never sees a half-written file
@@ -128,7 +135,7 @@ function createWindow() {
             buttons: ['Keep converting', 'Quit'],
             defaultId: 0,
             cancelId: 0,
-            title: 'UniFiles Converter',
+            title: 'UniFiles',
             message: 'Files are still being converted. Quit anyway?',
         });
         if (choice === 0) e.preventDefault();

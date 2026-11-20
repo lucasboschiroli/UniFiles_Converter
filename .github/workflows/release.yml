@@ -36,7 +36,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" --draft --title "UniFiles Converter $GITHUB_REF_NAME" --notes-file .github/release-notes.md --verify-tag
+        run: gh release create "$GITHUB_REF_NAME" --draft --title "UniFiles $GITHUB_REF_NAME" --notes-file .github/release-notes.md --verify-tag
       - run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
