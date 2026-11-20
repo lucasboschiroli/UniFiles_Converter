@@ -7,7 +7,8 @@ const updater = require('./updater');
 const { findTool, findCalibre, findRar, capabilities, refreshTools } = require('./tools');
 const { imageThumb } = require('./convert/images');
 const { videoThumb } = require('./convert/media');
-const { closeWorkers } = require('./convert/host');
+const { closeWorkers, pdfThumbs } = require('./convert/host');
+const { pageCount, parsePages } = require('./convert/pdftools');
 const { comicThumb } = require('./convert/comics');
 const { ebookThumb } = require('./convert/ebooks');
 
@@ -168,6 +169,17 @@ function registerIpc() {
         return res.canceled ? [] : expand(res.filePaths);
     });
     ipcMain.handle('files:describe', (_e, paths) => expand(paths));
+    // PDF tools: page count, page previews, and checking a page list as it's typed.
+    ipcMain.handle('pdf:info', async (_e, file) => {
+        try { return { pages: await pageCount(file) }; } catch (err) { return { error: err.message }; }
+    });
+    ipcMain.handle('pdf:thumbs', async (_e, { file, from, to }) => {
+        try { return await pdfThumbs(file, from, to); } catch (err) { return { error: err.message, pages: [] }; }
+    });
+    ipcMain.handle('pdf:check', (_e, { text, total }) => {
+        try { return { pages: parsePages(text, total) }; } catch (err) { return { error: err.message }; }
+    });
+
     ipcMain.handle('files:thumb', async (_e, file) => {
         const cat = formats.categoryOf(file);
         try {
@@ -175,6 +187,7 @@ function registerIpc() {
             if (cat === 'video') return await videoThumb(file);
             if (cat === 'comic') return await comicThumb(file);
             if (cat === 'ebook') return await ebookThumb(file);
+            if (formats.extOf(file) === 'pdf') return (await pdfThumbs(file, 1, 1)).pages[0] || null;
         } catch { /* no preview */ }
         return null;
     });

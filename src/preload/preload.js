@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('api', {
     // Dropped File objects -> their paths on disk.
     describeDropped: (files) => ipcRenderer.invoke('files:describe', Array.from(files).map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
     thumb: (file) => ipcRenderer.invoke('files:thumb', file),
+    pdfInfo: (file) => ipcRenderer.invoke('pdf:info', file),
+    pdfThumbs: (file, from, to) => ipcRenderer.invoke('pdf:thumbs', { file, from, to }),
+    pdfCheck: (text, total) => ipcRenderer.invoke('pdf:check', { text, total }),
 
     pickFolder: (current) => ipcRenderer.invoke('folder:pick', current),
     showItem: (file) => ipcRenderer.invoke('shell:showItem', file),

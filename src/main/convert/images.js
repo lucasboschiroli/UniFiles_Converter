@@ -141,4 +141,4 @@ async function imageThumb(src) {
     return `data:image/jpeg;base64,${buf.toString('base64')}`;
 }
 
-module.exports = { convertImage, imagesToPdf, imageThumb };
+module.exports = { convertImage, imagesToPdf, imageThumb, addPdfPage };

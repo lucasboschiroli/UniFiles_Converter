@@ -18,7 +18,7 @@ A desktop app (and command-line tool) to convert images, videos, audio files, do
 | Images: JPG, PNG, WebP, AVIF, GIF, TIFF, BMP, ICO, SVG | JPG, PNG, WebP, AVIF, GIF, TIFF, BMP, ICO (multi-size), PDF, CBZ |
 | Video: MP4, MOV, MKV, WebM, AVI, WMV, FLV, MPEG, 3GP, TS | MP4, WebM, MKV, MOV, AVI, GIF, or audio only (MP3, M4A, WAV, FLAC, OGG, Opus) |
 | Audio: MP3, WAV, OGG, FLAC, M4A, AAC, WMA, Opus, AIFF | MP3, WAV, OGG, FLAC, M4A, AAC, Opus |
-| PDF | Word (DOCX), TXT, EPUB, CBZ, or one PNG/JPG per page |
+| PDF | Word (DOCX), TXT, EPUB, CBZ, one PNG/JPG per page, or **PDF tools** (below) |
 | Word (DOCX) | PDF, TXT, HTML, EPUB, AZW3\*, MOBI\* |
 | TXT, Markdown | PDF, Word, EPUB, AZW3\*, MOBI\* |
 | HTML | PDF, TXT, EPUB, AZW3\*, MOBI\* |
@@ -28,6 +28,14 @@ A desktop app (and command-line tool) to convert images, videos, audio files, do
 
 \* Kindle formats (AZW3, MOBI) need the free [Calibre](https://calibre-ebook.com/download_windows) app installed; the app finds it automatically (press **Check again** after installing). Everything else works on its own.
 \*\* Creating CBR (RAR) files needs WinRAR, because RAR is a closed format. Reading CBR always works, and CBZ opens in every comic reader.
+
+**PDF tools:** set a PDF's format to **PDF TOOLS** and a panel opens under it:
+- **Extract pages** or **Remove pages**: type pages like `1-5, 8, 10-` (or `last`, or `5-1` for reverse order), or press **Show pages** and click the pages you want.
+- **Split into files**: one file per page, every N pages, or your own parts (`1-3, 4-10, 11-`).
+- **Rotate** any of the above by 90°, 180° or 270°.
+- **Merge**: with **Combine into one PDF or CBZ** on, every PDF (with the pages you chose) and every picture set to PDF become one PDF, in list order.
+
+Pages are copied as they are, so text stays selectable, page sizes stay the same and nothing loses quality. (This replaces the old browser-based PDF Splitter, which turned every page into a picture.)
 
 > PDF → Word keeps the text, headings and paragraphs, not the exact layout or images. Scanned PDFs have no text to extract; convert them to PNG/JPG instead.
 > DRM-protected (copy-protected) ebooks can't be converted.

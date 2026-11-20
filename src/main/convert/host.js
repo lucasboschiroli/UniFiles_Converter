@@ -112,23 +112,48 @@ function htmlText(html) {
 }
 
 // ---------------------------------------------------------------- pdf.js
-let pdfWin = null;
+// Two workers: one for conversions, one for page previews, so showing a
+// preview never interferes with a PDF that's being converted.
+const pdfWins = {};
 
-async function pdfWorker() {
-    if (pdfWin && !pdfWin.isDestroyed()) return pdfWin;
+async function pdfWorker(name) {
+    if (pdfWins[name] && !pdfWins[name].isDestroyed()) return pdfWins[name];
     // webSecurity off only here, so the worker page can read the local PDF
     // the user picked; it never loads anything but our own pdf.html.
-    pdfWin = hiddenWindow({ webSecurity: false });
-    await pdfWin.loadFile(path.join(__dirname, '..', '..', 'worker', 'pdf.html'));
+    const win = hiddenWindow({ webSecurity: false });
+    pdfWins[name] = win;
+    await win.loadFile(path.join(__dirname, '..', '..', 'worker', 'pdf.html'));
     // The page's module script loads pdf.js; wait until its functions exist.
-    await pdfWin.webContents.executeJavaScript(
+    await win.webContents.executeJavaScript(
         'new Promise((resolve, reject) => { let n = 0; const check = () => window.pdfText ? resolve(true) : ++n > 200 ? reject(new Error("pdf.js failed to load")) : setTimeout(check, 50); check(); })');
-    return pdfWin;
+    return win;
 }
 
-async function pdfCall(code) {
-    const win = await pdfWorker();
+async function pdfCall(code, name = 'convert') {
+    const win = await pdfWorker(name);
     return win.webContents.executeJavaScript(code);
+}
+
+// Small page pictures for the PDF tools preview (pages from..to, 1-based).
+let previewQueue = Promise.resolve();
+function pdfThumbs(src, from, to) {
+    const run = async () => {
+        const url = JSON.stringify(pathToFileURL(src).href);
+        const count = await pdfCall(`window.pdfOpen(${url})`, 'preview');
+        const out = [];
+        try {
+            for (let i = Math.max(1, from); i <= Math.min(count, to); i++) {
+                out.push(await pdfCall(`window.pdfRender(${i}, 0.35, "image/jpeg")`, 'preview'));
+            }
+        } finally {
+            await pdfCall('window.pdfClose()', 'preview');
+        }
+        return { count, pages: out };
+    };
+    // One preview at a time (the worker holds one open document).
+    const job = previewQueue.then(run, run);
+    previewQueue = job.catch(() => {});
+    return job;
 }
 
 // -> { pages: [{ paragraphs: [{ text, size, bold }] }] }
@@ -158,10 +183,12 @@ async function pdfToImages(src, target, outFor, onProgress) {
 }
 
 function closeWorkers() {
-    if (pdfWin && !pdfWin.isDestroyed()) pdfWin.destroy();
+    for (const [name, win] of Object.entries(pdfWins)) {
+        if (win && !win.isDestroyed()) win.destroy();
+        delete pdfWins[name];
+    }
     if (domWin && !domWin.isDestroyed()) domWin.destroy();
-    pdfWin = null;
     domWin = null;
 }
 
-module.exports = { htmlToPdf, htmlFileToPdf, htmlFileToText, pdfText, pdfToImages, htmlToXhtml, htmlBlocks, htmlText, closeWorkers };
+module.exports = { htmlToPdf, htmlFileToPdf, htmlFileToText, pdfText, pdfToImages, pdfThumbs, htmlToXhtml, htmlBlocks, htmlText, closeWorkers };

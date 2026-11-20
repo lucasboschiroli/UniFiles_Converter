@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { categoryOf } = require('./formats');
 const { uniquePath, killCurrent } = require('./tools');
-const { convertImage, imagesToPdf } = require('./convert/images');
+const { convertImage, addPdfPage } = require('./convert/images');
+const { applyPdfTools, combineToPdf } = require('./convert/pdftools');
 const { convertMedia } = require('./convert/media');
 const { convertDocument, writeDocx } = require('./convert/documents');
 const { convertEbook } = require('./convert/ebooks');
@@ -48,7 +49,10 @@ async function convertAll(jobs, options, emit) {
     // All images going to PDF (or to a comic) become one file, in list order.
     if (options.mergePdf) {
         for (const kind of ['pdf', 'cbz', 'cbr']) {
-            const group = queue.filter((j) => j.target === kind && categoryOf(j.path) === 'image');
+            // PDFs being edited join a combined PDF too (with their chosen pages),
+            // unless they're set to split, which makes several files instead.
+            const isPdfEdit = (j) => /\.pdf$/i.test(j.path) && (!j.pdf || j.pdf.mode !== 'split');
+            const group = queue.filter((j) => j.target === kind && (categoryOf(j.path) === 'image' || (kind === 'pdf' && isPdfEdit(j))));
             if (group.length < 2) continue;
             queue = queue.filter((j) => !group.includes(j));
             const first = group[0];
@@ -57,7 +61,7 @@ async function convertAll(jobs, options, emit) {
             const out = uniquePath(dir, `${path.parse(first.path).name} (combined)`, kind, taken);
             group.forEach((j) => emit({ type: 'item', key: j.key, status: 'working', label: 'Combining' }));
             try {
-                if (kind === 'pdf') await imagesToPdf(group.map((j) => j.path), out, options);
+                if (kind === 'pdf') await combineToPdf(group, out, { addImagePage: addPdfPage, imageOpts: options });
                 else await imagesToComic(group.map((j) => j.path), kind, out);
                 ok += group.length;
                 firstOutputs.push(out);
@@ -100,6 +104,7 @@ async function convertAll(jobs, options, emit) {
             if (category === 'image' && ['cbz', 'cbr'].includes(target)) result = await imagesToComic([src], target, out);
             else if (category === 'image') result = await convertImage(src, target, out, options);
             else if (category === 'video' || category === 'audio') result = await convertMedia(src, target, out, options, onProgress);
+            else if (category === 'document' && target === 'pdf' && /\.pdf$/i.test(src)) result = await applyPdfTools(src, job.pdf, { dir, base, taken });
             else if (category === 'document') result = await convertDocument(src, target, out, options, onProgress, outFor);
             else if (category === 'ebook') result = await convertEbook(src, target, out, options, onProgress, { writeDocx });
             else if (category === 'comic') result = await convertComic(src, target, out, options, onProgress);

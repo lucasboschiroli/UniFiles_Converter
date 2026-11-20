@@ -26,7 +26,8 @@ const CATEGORIES = {
         inputs: ['pdf', 'docx', 'txt', 'md', 'html', 'htm'],
         // What each document type can become.
         targetsByInput: {
-            pdf: ['docx', 'txt', 'epub', 'cbz', 'png', 'jpg'],
+            // "pdf" = PDF tools: extract, remove, split, rotate or merge pages.
+            pdf: ['docx', 'txt', 'epub', 'cbz', 'png', 'jpg', 'pdf'],
             docx: ['pdf', 'txt', 'html', 'epub', ...KINDLE],
             txt: ['pdf', 'docx', 'epub', ...KINDLE],
             md: ['pdf', 'docx', 'epub', ...KINDLE],
@@ -85,6 +86,7 @@ function targetsFor(file, caps = {}) {
     // (resize, compress); for everything else it would just be a copy.
     const same = (e) => e === ext || (ext === 'jpeg' && e === 'jpg') || (ext === 'tif' && e === 'tiff') ||
         (['azw', 'azw3'].includes(ext) && e === 'azw3') || (['mobi', 'prc'].includes(ext) && e === 'mobi');
+    if (ext === 'pdf') return list; // PDF -> PDF is the page tools
     return ['image', 'video', 'audio'].includes(cat) ? list : list.filter((t) => !same(t));
 }
 

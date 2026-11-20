@@ -106,7 +106,7 @@ window.addEventListener('drop', async (e) => {
 let thumbsRunning = 0;
 function loadThumbs() {
     while (thumbsRunning < 3) {
-        const f = state.files.find((x) => x.thumb === null && ['image', 'video', 'comic', 'ebook'].includes(x.category));
+        const f = state.files.find((x) => x.thumb === null && (['image', 'video', 'comic', 'ebook'].includes(x.category) || x.ext === 'pdf'));
         if (!f) return;
         f.thumb = false; // requested
         thumbsRunning++;
@@ -173,8 +173,10 @@ function resetIfDone(f) {
 
 function renderOptions() {
     const cats = presentCats();
-    document.querySelectorAll('.options-grid .opt').forEach((o) => o.classList.toggle('hidden', !cats.includes(o.dataset.cat)));
-    $('optionsCard').classList.toggle('hidden', !cats.some((c) => ['image', 'video', 'audio'].includes(c)));
+    // "Combine" matters for pictures, and for two or more PDFs in PDF tools.
+    const combine = cats.includes('image') || state.files.filter((f) => isPdfTools(f)).length > 1;
+    document.querySelectorAll('.options-grid .opt').forEach((o) => o.classList.toggle('hidden', o.dataset.cat === 'combine' ? !combine : !cats.includes(o.dataset.cat)));
+    $('optionsCard').classList.toggle('hidden', !combine && !cats.some((c) => ['image', 'video', 'audio'].includes(c)));
     const s = state.settings;
     const bits = [];
     if (cats.includes('image')) bits.push(`Quality ${s.quality}`, s.maxSize ? `max ${s.maxSize} px` : 'original size');
@@ -192,6 +194,7 @@ function renderList() {
 
 function paintThumb(f, box) {
     box.innerHTML = '';
+    box.classList.toggle('page-thumb', f.ext === 'pdf'); // show the whole page, not a crop
     if (f.thumb) {
         const img = el('img');
         img.src = f.thumb;
@@ -223,20 +226,214 @@ function renderItem(f) {
     const target = el('div', 'item-target');
     const select = el('select', 'pill-select');
     for (const t of f.targets) {
-        const o = el('option', null, t.toUpperCase());
+        const o = el('option', null, isPdfTools(f, t) ? 'PDF TOOLS' : t.toUpperCase());
         o.value = t;
         select.appendChild(o);
     }
     select.value = f.target;
-    select.onchange = () => { f.target = select.value; resetIfDone(f); renderBulk(); paintItem(f); updateHead(); };
+    select.onchange = () => { f.target = select.value; resetIfDone(f); renderBulk(); renderOptions(); paintItem(f); updateHead(); };
     target.append(el('span', null, '→'), select);
 
     const status = el('span', 'status');
     const actions = el('div', 'item-actions');
+    const tools = el('div', 'pdf-tools hidden');
 
-    li.append(thumb, body, target, status, actions);
+    li.append(thumb, body, target, status, actions, tools);
     paintItem(f, li);
     return li;
+}
+
+// ------------------------------------------------------------- PDF tools
+const isPdfTools = (f, t = f.target) => f.ext === 'pdf' && t === 'pdf';
+
+function pdfSettings(f) {
+    if (!f.pdf) f.pdf = { mode: 'extract', ranges: '', split: 'each', every: 2, rotate: 0 };
+    return f.pdf;
+}
+
+// Compresses page numbers into ranges: [1,2,3,7] -> "1-3, 7".
+function toRanges(nums) {
+    const out = [];
+    for (let i = 0; i < nums.length; i++) {
+        let j = i;
+        while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+        out.push(i === j ? `${nums[i]}` : `${nums[i]}-${nums[j]}`);
+        i = j;
+    }
+    return out.join(', ');
+}
+
+function segment(options, value, onPick) {
+    const seg = el('div', 'seg lower');
+    for (const [v, label] of options) {
+        const b = el('button', String(v) === String(value) ? 'on' : '', label);
+        b.onclick = () => { if (!state.busy) onPick(v); };
+        seg.appendChild(b);
+    }
+    return seg;
+}
+
+// Builds (or rebuilds) the PDF tools panel under a PDF's row.
+async function renderPdfTools(f, box) {
+    const s = pdfSettings(f);
+    if (f.pages === undefined) {
+        f.pages = null;
+        const info = await window.api.pdfInfo(f.path);
+        f.pages = info.pages || 0;
+        f.pdfError = info.error || null;
+    }
+    box.innerHTML = '';
+    const rebuild = () => { resetIfDone(f); renderPdfTools(f, box); };
+
+    if (f.pdfError) {
+        box.appendChild(el('div', 'tools-hint err', f.pdfError));
+        return;
+    }
+
+    const row1 = el('div', 'tools-row');
+    row1.append(el('span', 'opt-label', 'Pages'), segment(
+        [['extract', 'Extract pages'], ['remove', 'Remove pages'], ['split', 'Split into files'], ['all', 'Keep all pages']],
+        s.mode, (v) => { s.mode = v; rebuild(); }));
+    box.appendChild(row1);
+
+    const row2 = el('div', 'tools-row');
+    const check = el('span', 'tools-hint');
+    const pagesInput = (placeholder) => {
+        const input = el('input', 'pill-input wide');
+        input.type = 'text';
+        input.placeholder = placeholder;
+        input.value = s.ranges;
+        input.spellcheck = false;
+        input.oninput = () => { s.ranges = input.value; resetIfDone(f); validate(); paintThumbSelection(f, box); };
+        return input;
+    };
+    const validate = async () => {
+        if (s.mode === 'split' && s.split !== 'ranges') {
+            const n = s.split === 'each' ? f.pages : Math.ceil(f.pages / Math.max(1, s.every || 1));
+            check.textContent = `→ ${n} PDF${n === 1 ? '' : 's'}`;
+            check.classList.remove('err');
+            return;
+        }
+        if (s.mode === 'all') {
+            check.textContent = s.rotate ? `→ all ${f.pages} pages, rotated` : 'Choose a rotation below';
+            check.classList.toggle('err', !s.rotate);
+            return;
+        }
+        if (!s.ranges.trim()) { check.textContent = `This PDF has ${f.pages} page${f.pages === 1 ? '' : 's'}`; check.classList.remove('err'); return; }
+        if (s.mode === 'split') {
+            const parts = s.ranges.split(/[,;]+/).filter((p) => p.trim());
+            const results = await Promise.all(parts.map((p) => window.api.pdfCheck(p, f.pages)));
+            const bad = results.find((r) => r.error);
+            check.textContent = bad ? bad.error : `→ ${parts.length} PDF${parts.length === 1 ? '' : 's'}`;
+            check.classList.toggle('err', !!bad);
+            return;
+        }
+        const r = await window.api.pdfCheck(s.ranges, f.pages);
+        if (r.error) { check.textContent = r.error; check.classList.add('err'); return; }
+        const kept = s.mode === 'remove' ? f.pages - new Set(r.pages).size : r.pages.length;
+        check.textContent = `→ ${kept} of ${f.pages} pages`;
+        check.classList.toggle('err', kept <= 0);
+    };
+
+    if (s.mode === 'extract' || s.mode === 'remove') {
+        row2.append(pagesInput(s.mode === 'extract' ? 'Pages to keep, e.g. 1-5, 8, 10-' : 'Pages to remove, e.g. 1, last'), check);
+    } else if (s.mode === 'split') {
+        row2.appendChild(segment([['each', 'Every page'], ['every', 'Every N pages'], ['ranges', 'My own parts']], s.split, (v) => { s.split = v; rebuild(); }));
+        if (s.split === 'every') {
+            const n = el('input', 'pill-input narrow');
+            n.type = 'number';
+            n.min = '1';
+            n.value = s.every;
+            n.oninput = () => { s.every = Math.max(1, parseInt(n.value, 10) || 1); resetIfDone(f); validate(); };
+            row2.append(n);
+        }
+        if (s.split === 'ranges') row2.append(pagesInput('One file per part, e.g. 1-3, 4-10, 11-'));
+        row2.append(check);
+    } else {
+        row2.append(check);
+    }
+    box.appendChild(row2);
+
+    const row3 = el('div', 'tools-row');
+    row3.append(el('span', 'opt-label', 'Rotate'), segment([[0, 'None'], [90, '90° ↻'], [180, '180°'], [270, '90° ↺']], s.rotate, (v) => { s.rotate = v; rebuild(); }));
+    if (state.settings.mergePdf && state.files.filter((x) => x.target === 'pdf' && (x.category === 'image' || isPdfTools(x))).length > 1 && s.mode !== 'split') {
+        row3.append(el('span', 'tools-hint', 'Combine is on: these pages go into the combined PDF.'));
+    }
+    box.appendChild(row3);
+
+    // Page previews: click pages to pick them.
+    const row4 = el('div', 'tools-row');
+    const toggle = el('button', 'ghost-btn small', f.showPages ? 'Hide pages' : `Show pages (${f.pages})`);
+    toggle.onclick = () => { f.showPages = !f.showPages; rebuild(); };
+    row4.appendChild(toggle);
+    if (f.showPages && (s.mode === 'extract' || s.mode === 'remove')) row4.append(el('span', 'tools-hint', s.mode === 'extract' ? 'Click pages to keep them.' : 'Click pages to remove them.'));
+    box.appendChild(row4);
+
+    if (f.showPages) {
+        const grid = el('div', 'page-grid');
+        box.appendChild(grid);
+        loadPageThumbs(f, grid, box, 1);
+    }
+    validate();
+}
+
+async function loadPageThumbs(f, grid, box, from) {
+    const BATCH = 24;
+    const to = Math.min(f.pages, from + BATCH - 1);
+    const placeholders = [];
+    for (let n = from; n <= to; n++) {
+        const cell = el('button', 'page-cell');
+        cell.dataset.page = n;
+        cell.appendChild(el('span', 'page-num', n));
+        cell.onclick = () => togglePage(f, n, box);
+        grid.appendChild(cell);
+        placeholders.push(cell);
+    }
+    paintThumbSelection(f, box);
+    f.thumbCache = f.thumbCache || {};
+    const missing = placeholders.filter((c) => !f.thumbCache[c.dataset.page]);
+    if (missing.length) {
+        const r = await window.api.pdfThumbs(f.path, from, to);
+        (r.pages || []).forEach((url, i) => { f.thumbCache[from + i] = url; });
+    }
+    for (const cell of placeholders) {
+        const url = f.thumbCache[cell.dataset.page];
+        if (url && !cell.querySelector('img')) {
+            const img = el('img');
+            img.src = url;
+            img.alt = '';
+            cell.prepend(img);
+        }
+    }
+    if (to < f.pages) {
+        const more = el('button', 'ghost-btn small page-more', `Show more (${f.pages - to} left)`);
+        more.onclick = () => { more.remove(); loadPageThumbs(f, grid, box, to + 1); };
+        grid.appendChild(more);
+    }
+}
+
+// Clicking a page adds it to (or takes it out of) the typed page list.
+async function togglePage(f, n, box) {
+    const s = pdfSettings(f);
+    if (state.busy) return;
+    if (s.mode !== 'extract' && s.mode !== 'remove') { s.mode = 'extract'; s.ranges = ''; }
+    const r = s.ranges.trim() ? await window.api.pdfCheck(s.ranges, f.pages) : { pages: [] };
+    const set = new Set((r.pages || []).map((p) => p + 1));
+    if (set.has(n)) set.delete(n); else set.add(n);
+    s.ranges = toRanges([...set].sort((a, b) => a - b));
+    resetIfDone(f);
+    renderPdfTools(f, box);
+}
+
+async function paintThumbSelection(f, box) {
+    const s = pdfSettings(f);
+    const r = s.ranges.trim() && (s.mode === 'extract' || s.mode === 'remove') ? await window.api.pdfCheck(s.ranges, f.pages) : { pages: [] };
+    const set = new Set((r.pages || []).map((p) => p + 1));
+    box.querySelectorAll('.page-cell').forEach((c) => {
+        const on = set.has(Number(c.dataset.page));
+        c.classList.toggle('picked', on && s.mode === 'extract');
+        c.classList.toggle('removed', on && s.mode === 'remove');
+    });
 }
 
 function statusClass(s) {
@@ -246,6 +443,12 @@ function statusClass(s) {
 function paintItem(f, li = $(`item-${f.key}`)) {
     if (!li) return;
     li.classList.toggle('active', f.status === 'working');
+
+    // The PDF tools panel opens when a PDF is set to "PDF TOOLS".
+    const tools = li.querySelector('.pdf-tools');
+    const wantTools = isPdfTools(f);
+    tools.classList.toggle('hidden', !wantTools);
+    if (wantTools && !tools.childElementCount) renderPdfTools(f, tools);
     const status = li.querySelector('.status');
     status.className = `status ${statusClass(f.status)}`;
     status.textContent = f.label;
@@ -422,7 +625,7 @@ $('convertBtn').onclick = async () => {
     setBusy(true);
     paintOverall();
     const s = state.settings;
-    await window.api.startConvert(jobs.map((f) => ({ key: f.key, path: f.path, target: f.target })), {
+    await window.api.startConvert(jobs.map((f) => ({ key: f.key, path: f.path, target: f.target, pdf: isPdfTools(f) ? pdfSettings(f) : undefined })), {
         outMode: s.outMode, outDir: s.outDir, quality: s.quality, maxSize: s.maxSize,
         videoQuality: s.videoQuality, resolution: s.resolution, audioBitrate: s.audioBitrate, mergePdf: s.mergePdf,
     });
