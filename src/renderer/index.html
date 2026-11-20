@@ -37,11 +37,14 @@
             </div>
             <h2>Drop files here to convert them</h2>
             <p>Mix anything: each file gets its own format, and you can change them all at once.</p>
+            <p id="emptyNotice" class="empty-notice"></p>
             <div class="format-groups">
                 <div><b>Images</b>JPG · PNG · WebP · AVIF · GIF · TIFF · BMP · ICO · SVG · PDF</div>
                 <div><b>Video</b>MP4 · WebM · MKV · MOV · AVI · GIF · to MP3</div>
                 <div><b>Audio</b>MP3 · WAV · FLAC · OGG · M4A · AAC · Opus</div>
-                <div><b>Documents</b>PDF · Word · TXT · Markdown · HTML · PDF to images</div>
+                <div><b>Documents</b>PDF · Word · TXT · Markdown · HTML · to EPUB · PDF to images</div>
+                <div><b>Ebooks</b>EPUB · FB2 · AZW3 · MOBI · to PDF, Word, TXT</div>
+                <div><b>Comics</b>CBZ · CBR · to PDF, EPUB, page images</div>
                 <div><b>Spreadsheets</b>XLSX · XLS · ODS · CSV · to PDF</div>
             </div>
         </section>
@@ -50,6 +53,11 @@
             <div class="card bulk">
                 <div class="bulk-title">Convert all</div>
                 <div id="bulkRows" class="bulk-rows"></div>
+                <div id="toolHint" class="tool-hint hidden">
+                    <span>Want <b>AZW3</b> or <b>MOBI</b> (Kindle)? Those need the free <b>Calibre</b> app.</span>
+                    <button id="getCalibreBtn" class="ghost-btn small">Get Calibre</button>
+                    <button id="recheckBtn" class="ghost-btn small">Check again</button>
+                </div>
             </div>
 
             <details id="optionsCard" class="card options">
@@ -99,8 +107,8 @@
                         </div>
                     </div>
                     <div class="opt" data-cat="image">
-                        <span class="opt-label">Images to PDF</span>
-                        <label class="toggle"><input type="checkbox" id="mergePdfChk"><span></span>Combine into one PDF</label>
+                        <span class="opt-label">Images to PDF / comic</span>
+                        <label class="toggle"><input type="checkbox" id="mergePdfChk"><span></span>Combine into one PDF or CBZ</label>
                     </div>
                 </div>
             </details>

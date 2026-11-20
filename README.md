@@ -15,16 +15,23 @@ A desktop app (and command-line tool) to convert images, videos, audio files, do
 
 | From | To |
 |---|---|
-| Images: JPG, PNG, WebP, AVIF, GIF, TIFF, BMP, ICO, SVG | JPG, PNG, WebP, AVIF, GIF, TIFF, BMP, ICO (multi-size), PDF |
+| Images: JPG, PNG, WebP, AVIF, GIF, TIFF, BMP, ICO, SVG | JPG, PNG, WebP, AVIF, GIF, TIFF, BMP, ICO (multi-size), PDF, CBZ |
 | Video: MP4, MOV, MKV, WebM, AVI, WMV, FLV, MPEG, 3GP, TS | MP4, WebM, MKV, MOV, AVI, GIF, or audio only (MP3, M4A, WAV, FLAC, OGG, Opus) |
 | Audio: MP3, WAV, OGG, FLAC, M4A, AAC, WMA, Opus, AIFF | MP3, WAV, OGG, FLAC, M4A, AAC, Opus |
-| PDF | Word (DOCX), TXT, or one PNG/JPG per page |
-| Word (DOCX) | PDF, TXT, HTML |
-| TXT, Markdown | PDF, Word |
-| HTML | PDF, TXT |
+| PDF | Word (DOCX), TXT, EPUB, CBZ, or one PNG/JPG per page |
+| Word (DOCX) | PDF, TXT, HTML, EPUB, AZW3\*, MOBI\* |
+| TXT, Markdown | PDF, Word, EPUB, AZW3\*, MOBI\* |
+| HTML | PDF, TXT, EPUB, AZW3\*, MOBI\* |
+| Ebooks: EPUB, FB2, AZW3\*, MOBI\* | EPUB, AZW3\*, MOBI\*, PDF, Word, TXT, HTML |
+| Comics: CBZ, CBR | CBZ, CBR\*\*, PDF, EPUB (fixed layout), or a folder with every page as a picture |
 | Spreadsheets: XLSX, XLS, ODS, CSV, TSV | XLSX, CSV (one per sheet), ODS, PDF, HTML |
 
+\* Kindle formats (AZW3, MOBI) need the free [Calibre](https://calibre-ebook.com/download_windows) app installed; the app finds it automatically (press **Check again** after installing). Everything else works on its own.
+\*\* Creating CBR (RAR) files needs WinRAR, because RAR is a closed format. Reading CBR always works, and CBZ opens in every comic reader.
+
 > PDF → Word keeps the text, headings and paragraphs, not the exact layout or images. Scanned PDFs have no text to extract; convert them to PNG/JPG instead.
+> DRM-protected (copy-protected) ebooks can't be converted.
+> Several pictures can become one comic: set them to CBZ with **Combine into one PDF or CBZ** on.
 
 **Run it from source:**
 ```bash

@@ -1,10 +1,12 @@
 const $ = (id) => document.getElementById(id);
 
-const CAT_ORDER = ['image', 'video', 'audio', 'document', 'sheet'];
-const CAT_LABEL = { image: 'Images', video: 'Videos', audio: 'Audio', document: 'Documents', sheet: 'Spreadsheets' };
+const CAT_ORDER = ['image', 'video', 'audio', 'document', 'ebook', 'comic', 'sheet'];
+const CAT_LABEL = { image: 'Images', video: 'Videos', audio: 'Audio', document: 'Documents', ebook: 'Ebooks', comic: 'Comics', sheet: 'Spreadsheets' };
+const CALIBRE_URL = 'https://calibre-ebook.com/download_windows';
 
 const state = {
     settings: null,
+    tools: {},       // { ffmpeg, calibre, rar } paths, or null when not installed
     files: [],       // { key, path, name, ext, size, category, targets, target, status, label, percent, error, outputs, thumb }
     busy: false,
     run: null,
@@ -48,18 +50,24 @@ window.api.onMaximized((max) => {
 function addFiles(list) {
     const known = new Set(state.files.map((f) => f.path.toLowerCase()));
     const unsupported = [];
+    const needCalibre = [];
     let added = 0;
     for (const f of list) {
+        if (f.needs === 'calibre') { needCalibre.push(f.name); continue; }
         if (!f.category || !f.targets.length) { unsupported.push(f.name); continue; }
         if (known.has(f.path.toLowerCase())) continue;
         known.add(f.path.toLowerCase());
         state.files.push({ ...f, key: String(state.nextKey++), status: 'waiting', label: 'Ready', percent: 0, error: null, outputs: null, thumb: null });
         added++;
     }
-    state.notice = unsupported.length
-        ? `Skipped ${unsupported.length} file${unsupported.length > 1 ? 's' : ''} that can't be converted: ${unsupported.slice(0, 3).join(', ')}${unsupported.length > 3 ? '…' : ''}`
-        : '';
-    if (added || unsupported.length) render();
+    const notes = [];
+    if (needCalibre.length) notes.push(`${needCalibre.length} Kindle book${needCalibre.length > 1 ? 's' : ''} (AZW3/MOBI) ${needCalibre.length > 1 ? 'need' : 'needs'} the free Calibre app: install it, then press "Check again"`);
+    if (unsupported.length) notes.push(`Skipped ${unsupported.length} file${unsupported.length > 1 ? 's' : ''} that can't be converted: ${unsupported.slice(0, 3).join(', ')}${unsupported.length > 3 ? '…' : ''}`);
+    state.notice = notes.join('  ·  ');
+    state.pendingKindle = needCalibre.length ? list.filter((f) => f.needs === 'calibre').map((f) => f.path) : [];
+    if (!state.files.length && notes.length) $('emptyNotice').textContent = state.notice;
+    paintToolHint();
+    if (added || notes.length) render();
     loadThumbs();
 }
 
@@ -98,7 +106,7 @@ window.addEventListener('drop', async (e) => {
 let thumbsRunning = 0;
 function loadThumbs() {
     while (thumbsRunning < 3) {
-        const f = state.files.find((x) => x.thumb === null && (x.category === 'image' || x.category === 'video'));
+        const f = state.files.find((x) => x.thumb === null && ['image', 'video', 'comic', 'ebook'].includes(x.category));
         if (!f) return;
         f.thumb = false; // requested
         thumbsRunning++;
@@ -338,12 +346,34 @@ async function initOptions() {
     };
 }
 
+// "Get Calibre" / "Check again": Kindle formats appear once Calibre is installed.
+function paintToolHint() {
+    const want = !state.tools.calibre && (state.pendingKindle?.length || state.files.some((f) => ['ebook', 'document'].includes(f.category)));
+    $('toolHint').classList.toggle('hidden', !want);
+}
+$('getCalibreBtn').onclick = () => window.api.openLink(CALIBRE_URL);
+$('recheckBtn').onclick = async () => {
+    const { status, files } = await window.api.refreshTools([...state.files.map((f) => f.path), ...(state.pendingKindle || [])]);
+    state.tools = status;
+    // Refresh every file's list of formats with what's available now.
+    const fresh = new Map(files.map((f) => [f.path.toLowerCase(), f]));
+    for (const f of state.files) {
+        const n = fresh.get(f.path.toLowerCase());
+        if (n) { f.targets = n.targets; if (!f.targets.includes(f.target)) f.target = n.target; }
+    }
+    const pending = files.filter((f) => (state.pendingKindle || []).some((p) => p.toLowerCase() === f.path.toLowerCase()));
+    state.pendingKindle = [];
+    state.notice = status.calibre ? '' : 'Calibre still wasn’t found. If you just installed it, try again in a moment.';
+    if (pending.length) addFiles(pending); else { paintToolHint(); render(); }
+};
+
 async function initTools() {
     const t = await window.api.toolStatus();
+    state.tools = t;
     const badge = $('toolBadge');
     if (t.ffmpeg) {
         badge.textContent = 'Ready';
-        badge.title = `ffmpeg: ${t.ffmpeg}`;
+        badge.title = [`ffmpeg: ${t.ffmpeg}`, `Calibre (Kindle formats): ${t.calibre || 'not installed'}`, `WinRAR (CBR output): ${t.rar || 'not installed'}`].join('\n');
     } else {
         badge.textContent = 'ffmpeg missing';
         badge.classList.add('bad');

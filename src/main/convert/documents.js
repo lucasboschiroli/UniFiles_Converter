@@ -5,6 +5,8 @@ const path = require('path');
 const mammoth = require('mammoth');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, PageBreak } = require('docx');
 const host = require('./host');
+const ebooks = require('./ebooks');
+const comics = require('./comics');
 
 const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -110,12 +112,41 @@ function textToPages(text, markdown) {
     return [{ paragraphs }];
 }
 
+// A document as HTML, for turning it into an ebook.
+async function documentHtml(src, ext) {
+    if (ext === 'pdf') {
+        const { pages } = await host.pdfText(src);
+        const paras = pages.flatMap((p) => p.paragraphs);
+        if (!paras.length) throw new Error('This PDF has no selectable text (it is probably scanned), so it can\'t become an ebook.');
+        const sizes = paras.map((p) => p.size).filter(Boolean).sort((a, b) => a - b);
+        const body = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 11;
+        return paras.map((p) => {
+            const tag = p.size > body * 1.7 ? 'h1' : p.size > body * 1.25 ? 'h2' : 'p';
+            return `<${tag}>${escapeHtml(p.text)}</${tag}>`;
+        }).join('\n');
+    }
+    if (ext === 'docx') return (await mammoth.convertToHtml({ path: src })).value;
+    if (ext === 'md') return markdownToHtml(readText(src));
+    if (ext === 'txt') {
+        return readText(src).split(/\r?\n\s*\r?\n/).filter((p) => p.trim())
+            .map((p) => `<p>${escapeHtml(p.trim()).replace(/\r?\n/g, '<br/>')}</p>`).join('\n');
+    }
+    const html = readText(src);
+    const body = /<body\b[^>]*>([\s\S]*)<\/body>/i.exec(html);
+    return (body ? body[1] : html).replace(/<script[\s\S]*?<\/script>/gi, '');
+}
+
 async function convertDocument(src, target, out, opts, onProgress, outFor) {
     const ext = path.extname(src).slice(1).toLowerCase();
     const title = path.basename(src, path.extname(src));
 
+    if (['epub', 'azw3', 'mobi'].includes(target)) {
+        return ebooks.documentToEbook(src, target, out, onProgress, await documentHtml(src, ext), title);
+    }
+
     if (ext === 'pdf') {
         if (target === 'png' || target === 'jpg') return host.pdfToImages(src, target, outFor, onProgress);
+        if (target === 'cbz') return comics.pdfToComic(src, out, onProgress);
         const { pages } = await host.pdfText(src);
         if (!pages.some((p) => p.paragraphs.length)) {
             throw new Error('This PDF has no selectable text (it is probably scanned). Try converting it to PNG or JPG instead.');
@@ -150,4 +181,4 @@ async function convertDocument(src, target, out, opts, onProgress, outFor) {
     throw new Error(`Can't convert ${ext.toUpperCase()} to ${target.toUpperCase()}`);
 }
 
-module.exports = { convertDocument };
+module.exports = { convertDocument, writeDocx };

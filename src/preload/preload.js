@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('api', {
     openFile: (file) => ipcRenderer.invoke('shell:open', file),
 
     toolStatus: () => ipcRenderer.invoke('tools:status'),
+    refreshTools: (paths) => ipcRenderer.invoke('tools:refresh', paths),
+    openLink: (url) => ipcRenderer.invoke('link:open', url),
     startConvert: (jobs, options) => ipcRenderer.invoke('convert:start', { jobs, options }),
     cancelConvert: () => ipcRenderer.invoke('convert:cancel'),
     onConvertEvent: (cb) => {

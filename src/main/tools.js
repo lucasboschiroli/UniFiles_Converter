@@ -26,6 +26,65 @@ function findTool(name) {
     return found;
 }
 
+// Optional programs installed on the PC, looked up in their usual places.
+function findInstalled(name, candidates) {
+    const key = `installed:${name}`;
+    if (key in toolCache) return toolCache[key];
+    const roots = [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs')].filter(Boolean);
+    let found = null;
+    for (const root of roots) {
+        for (const rel of candidates) {
+            const p = path.join(root, rel);
+            if (fs.existsSync(p)) { found = p; break; }
+        }
+        if (found) break;
+    }
+    if (!found) {
+        const r = spawnSync(isWin ? 'where' : 'which', [name], { encoding: 'utf8', windowsHide: true });
+        if (r.status === 0) found = r.stdout.split(/\r?\n/)[0].trim() || null;
+    }
+    toolCache[key] = found;
+    return found;
+}
+
+// Calibre's converter: the only practical way to read and write Kindle formats.
+const findCalibre = () => findInstalled('ebook-convert', ['Calibre2\\ebook-convert.exe', 'Calibre\\ebook-convert.exe']);
+// WinRAR's command-line tool: needed to create .cbr (RAR) files.
+const findRar = () => findInstalled('rar', ['WinRAR\\Rar.exe']);
+
+function capabilities() {
+    return { calibre: !!findCalibre(), rar: !!findRar() };
+}
+
+// Forget what was found, so programs installed while the app is open are noticed.
+function refreshTools() {
+    for (const k of Object.keys(toolCache)) delete toolCache[k];
+}
+
+// Runs any helper program, tracked so Cancel can stop it.
+function runTool(cmd, args, { onLine } = {}) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(cmd, args, { windowsHide: true });
+        current = child;
+        let out = '';
+        const feed = (chunk) => {
+            const text = chunk.toString();
+            out += text;
+            if (onLine) text.split(/\r?\n/).forEach((l) => l.trim() && onLine(l.trim()));
+        };
+        child.stdout.on('data', feed);
+        child.stderr.on('data', feed);
+        child.on('error', (err) => { current = null; reject(err); });
+        child.on('close', (code) => {
+            current = null;
+            if (code === 0) return resolve(out);
+            const lines = out.trim().split(/\r?\n/).filter(Boolean);
+            const reason = [...lines].reverse().find((l) => /error|cannot|failed|not |invalid|unsupported|drm/i.test(l));
+            reject(new Error((reason || lines[lines.length - 1] || `${path.basename(cmd)} exited with code ${code}`).trim()));
+        });
+    });
+}
+
 // Never overwrite: "photo.png" -> "photo (1).png" -> "photo (2).png"…
 function uniquePath(dir, base, ext, taken = new Set()) {
     let candidate = path.join(dir, `${base}.${ext}`);
@@ -89,4 +148,4 @@ function probeDuration(file) {
     return parseFloat(r.stdout) || 0;
 }
 
-module.exports = { binDir, findTool, uniquePath, runFfmpeg, probeDuration, killCurrent };
+module.exports = { binDir, findTool, uniquePath, runFfmpeg, probeDuration, killCurrent, findCalibre, findRar, capabilities, refreshTools, runTool };

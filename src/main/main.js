@@ -4,10 +4,12 @@ const fs = require('fs');
 const formats = require('./formats');
 const converter = require('./converter');
 const updater = require('./updater');
-const { findTool } = require('./tools');
+const { findTool, findCalibre, findRar, capabilities, refreshTools } = require('./tools');
 const { imageThumb } = require('./convert/images');
 const { videoThumb } = require('./convert/media');
 const { closeWorkers } = require('./convert/host');
+const { comicThumb } = require('./convert/comics');
+const { ebookThumb } = require('./convert/ebooks');
 
 let mainWindow = null;
 
@@ -42,7 +44,7 @@ function saveSettings(s) {
 }
 
 // ------------------------------------------------------------------ files
-function describe(file) {
+function describe(file, caps = capabilities()) {
     let size = 0;
     try { size = fs.statSync(file).size; } catch { /* gone */ }
     const category = formats.categoryOf(file);
@@ -52,8 +54,10 @@ function describe(file) {
         ext: formats.extOf(file),
         size,
         category,
-        targets: formats.targetsFor(file),
-        target: formats.defaultTarget(file),
+        targets: formats.targetsFor(file, caps),
+        target: formats.defaultTarget(file, caps),
+        // A program this file needs that isn't installed (e.g. Calibre for Kindle books).
+        needs: formats.targetsFor(file, caps).length ? null : formats.missingTool(formats.extOf(file), caps),
     };
 }
 
@@ -70,7 +74,9 @@ function expand(paths) {
             }
         } else if (stat.isFile()) out.push(p);
     }
-    return out.map(describe);
+    // (Not out.map(describe): map would pass the index as the second argument.)
+    const caps = capabilities();
+    return out.map((file) => describe(file, caps));
 }
 
 // ------------------------------------------------------------------ window
@@ -111,6 +117,8 @@ function createWindow() {
     mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     // Dropping a file on the window must not navigate to it.
     mainWindow.webContents.on('will-navigate', (e) => e.preventDefault());
+
+    mainWindow.on('closed', quitAll);
 
     mainWindow.on('close', (e) => {
         if (!converter.isBusy()) return;
@@ -165,6 +173,8 @@ function registerIpc() {
         try {
             if (cat === 'image') return await imageThumb(file);
             if (cat === 'video') return await videoThumb(file);
+            if (cat === 'comic') return await comicThumb(file);
+            if (cat === 'ebook') return await ebookThumb(file);
         } catch { /* no preview */ }
         return null;
     });
@@ -180,7 +190,16 @@ function registerIpc() {
     ipcMain.handle('shell:showItem', (_e, file) => shell.showItemInFolder(file));
     ipcMain.handle('shell:open', (_e, file) => shell.openPath(file));
 
-    ipcMain.handle('tools:status', () => ({ ffmpeg: findTool('ffmpeg') }));
+    ipcMain.handle('tools:status', () => ({ ffmpeg: findTool('ffmpeg'), calibre: findCalibre(), rar: findRar() }));
+    // Look again (e.g. after installing Calibre) and refresh the list's formats.
+    ipcMain.handle('tools:refresh', (_e, paths) => {
+        refreshTools();
+        return { status: { ffmpeg: findTool('ffmpeg'), calibre: findCalibre(), rar: findRar() }, files: expand(paths || []) };
+    });
+    // Only well-known download pages, opened in the real browser.
+    ipcMain.handle('link:open', (_e, url) => {
+        if (/^https:\/\/(calibre-ebook\.com|www\.win-rar\.com)\//.test(url)) shell.openExternal(url);
+    });
     ipcMain.handle('convert:start', (_e, { jobs, options }) => {
         converter.convertAll(jobs, options, (event) => {
             if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('convert:event', event);
@@ -197,7 +216,10 @@ app.whenReady().then(() => {
     updater.init(() => mainWindow);
 });
 
-app.on('window-all-closed', () => {
+// Closing the main window quits the app. The hidden helper windows (PDF and
+// ebook parsing) would otherwise keep it running invisibly in the background.
+function quitAll() {
     closeWorkers();
     app.quit();
-});
+}
+app.on('window-all-closed', quitAll);

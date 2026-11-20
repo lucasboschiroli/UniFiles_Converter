@@ -62,6 +62,55 @@ async function htmlFileToText(src) {
     return withHtmlFile(src, (win) => win.webContents.executeJavaScript('document.body ? document.body.innerText : ""'));
 }
 
+// ---------------------------------------------------- DOM helpers (sandboxed)
+// A blank hidden page whose only job is to run Chromium's HTML parser on
+// book content. Nothing is loaded into it; markup is parsed with DOMParser,
+// which never runs scripts or fetches anything.
+let domWin = null;
+async function domCall(fn, arg) {
+    if (!domWin || domWin.isDestroyed()) {
+        domWin = hiddenWindow();
+        await domWin.loadURL('about:blank');
+    }
+    return domWin.webContents.executeJavaScript(`(${fn.toString()})(${JSON.stringify(arg)})`);
+}
+
+// Any HTML -> well-formed XHTML for EPUB (scripts, forms and frames removed).
+function htmlToXhtml(html) {
+    return domCall((src) => {
+        const doc = new DOMParser().parseFromString(src, 'text/html');
+        doc.querySelectorAll('script, iframe, object, embed, form, link, meta, style, base').forEach((n) => n.remove());
+        doc.querySelectorAll('*').forEach((n) => {
+            for (const a of [...n.attributes]) if (/^on/i.test(a.name)) n.removeAttribute(a.name);
+        });
+        const s = new XMLSerializer();
+        return [...doc.body.childNodes].map((n) => s.serializeToString(n)).join('')
+            .replace(/ xmlns="http:\/\/www\.w3\.org\/1999\/xhtml"/g, '');
+    }, html);
+}
+
+// HTML -> [{ tag: 'h1'|'h2'|'h3'|'p'|'li', text }] for building Word files.
+function htmlBlocks(html) {
+    return domCall((src) => {
+        const doc = new DOMParser().parseFromString(src, 'text/html');
+        const out = [];
+        doc.body.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, pre, blockquote, td').forEach((n) => {
+            if (n.closest('li') && n.tagName !== 'LI') return; // text inside a list item counts once
+            const text = n.innerText !== undefined ? n.textContent.replace(/\s+/g, ' ').trim() : '';
+            if (text) out.push({ tag: n.tagName.toLowerCase(), text });
+        });
+        return out;
+    }, html);
+}
+
+function htmlText(html) {
+    return domCall((src) => {
+        const doc = new DOMParser().parseFromString(src, 'text/html');
+        doc.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, div, br, tr').forEach((n) => n.append('\n'));
+        return doc.body.textContent.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    }, html);
+}
+
 // ---------------------------------------------------------------- pdf.js
 let pdfWin = null;
 
@@ -110,7 +159,9 @@ async function pdfToImages(src, target, outFor, onProgress) {
 
 function closeWorkers() {
     if (pdfWin && !pdfWin.isDestroyed()) pdfWin.destroy();
+    if (domWin && !domWin.isDestroyed()) domWin.destroy();
     pdfWin = null;
+    domWin = null;
 }
 
-module.exports = { htmlToPdf, htmlFileToPdf, htmlFileToText, pdfText, pdfToImages, closeWorkers };
+module.exports = { htmlToPdf, htmlFileToPdf, htmlFileToText, pdfText, pdfToImages, htmlToXhtml, htmlBlocks, htmlText, closeWorkers };
